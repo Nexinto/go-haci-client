@@ -8,11 +8,11 @@ import (
 	neturl "net/url"
 	"strings"
 
+	ccidr "github.com/apparentlymart/go-cidr/cidr"
 	"gopkg.in/jmcvetta/napping.v3"
 )
 
 type Network struct {
-	ID          string   `json:"ID"`
 	CreateDate  string   `json:"createDate"`
 	CreateFrom  string   `json:"createFrom"`
 	Description string   `json:"description"`
@@ -45,8 +45,13 @@ type WebClient struct {
 
 // A very simple and limited client for unit tests.
 type FakeClient struct {
+	Supernets map[string]*FakeSupernet
+}
+
+type FakeSupernet struct {
 	Networks map[string]Network
-	Counter  int
+	Network  net.IPNet
+	Last     net.IP
 }
 
 func NewWebClient(url, username, password, root string) (haci *WebClient, err error) {
@@ -68,7 +73,7 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 }
 
 func NewFakeClient() *FakeClient {
-	return &FakeClient{Networks: map[string]Network{}, Counter: 1}
+	return &FakeClient{Supernets: map[string]*FakeSupernet{}}
 }
 
 func (c *WebClient) Get(network string) (network1 Network, err error) {
@@ -154,12 +159,19 @@ func (c *WebClient) Delete(network string) (err error) {
 }
 
 func (c *FakeClient) Get(network string) (Network, error) {
-	return c.Networks[network], nil
+	for _, s := range c.Supernets {
+		if n, ok := s.Networks[network]; ok {
+			return n, nil
+		}
+	}
+	return Network{}, nil
 }
 
 func (c *FakeClient) List(network string) (networks []Network, err error) {
-	for _, n := range c.Networks {
-		networks = append(networks, n)
+	if s, ok := c.Supernets[network]; ok {
+		for _, n := range s.Networks {
+			networks = append(networks, n)
+		}
 	}
 
 	return
@@ -167,24 +179,33 @@ func (c *FakeClient) List(network string) (networks []Network, err error) {
 
 func (c *FakeClient) Assign(network, description string, cidr int, tags []string) (network1 Network, err error) {
 
-	ip := fmt.Sprintf("10.0.0.%d/32", c.Counter)
+	ip, net, err := net.ParseCIDR(network)
+	if err != nil {
+		return Network{}, err
+	}
+
+	if _, ok := c.Supernets[network]; !ok {
+		c.Supernets[network] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: ip}
+	}
+
+	newip := ccidr.Inc(c.Supernets[network].Last)
+	netname := fmt.Sprintf("%s/32", newip.String())
 
 	network1 = Network{
-		ID:          fmt.Sprintf("%d", c.Counter),
-		Network:     ip,
+		Network:     netname,
 		Description: description,
 		Tags:        tags,
 	}
 
-	c.Networks[ip] = network1
-
-	c.Counter = c.Counter + 1
+	c.Supernets[network].Networks[netname] = network1
+	c.Supernets[network].Last = newip
 
 	return
 }
 
-func (c *FakeClient) Delete(network string) (err error) {
-	delete(c.Networks, network)
-
-	return
+func (c *FakeClient) Delete(network string) error {
+	for _, s := range c.Supernets {
+		delete(s.Networks, network)
+	}
+	return nil
 }
