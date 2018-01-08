@@ -3,6 +3,7 @@ package haci
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	neturl "net/url"
 	"strings"
@@ -20,11 +21,21 @@ type Network struct {
 	Tags        []string `json:"tags"`
 }
 
+func (n Network) IP() (string, error) {
+	ip, _, err := net.ParseCIDR(n.Network)
+
+	if err != nil {
+		return "", err
+	}
+
+	return ip.String(), nil
+}
+
 type Client interface {
-	Get(string) (Network, error)
-	List(string) ([]Network, error)
-	Assign(string, string, int, []string) (Network, error)
-	Delete(string) error
+	Get(network string) (Network, error)
+	List(network string) ([]Network, error)
+	Assign(network string, description string, cidr int, tags []string) (Network, error)
+	Delete(network string) error
 }
 
 type WebClient struct {
