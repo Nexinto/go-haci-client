@@ -8,7 +8,6 @@ import (
 	neturl "net/url"
 	"strings"
 
-	"github.com/nu7hatch/gouuid"
 	"gopkg.in/jmcvetta/napping.v3"
 )
 
@@ -47,6 +46,7 @@ type WebClient struct {
 // A very simple and limited client for unit tests.
 type FakeClient struct {
 	Networks map[string]Network
+	Counter  int
 }
 
 func NewWebClient(url, username, password, root string) (haci *WebClient, err error) {
@@ -68,7 +68,7 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 }
 
 func NewFakeClient() *FakeClient {
-	return &FakeClient{Networks: map[string]Network{}}
+	return &FakeClient{Networks: map[string]Network{}, Counter: 1}
 }
 
 func (c *WebClient) Get(network string) (network1 Network, err error) {
@@ -166,16 +166,19 @@ func (c *FakeClient) List(network string) (networks []Network, err error) {
 }
 
 func (c *FakeClient) Assign(network, description string, cidr int, tags []string) (network1 Network, err error) {
-	u, _ := uuid.NewV4()
+
+	ip := fmt.Sprintf("10.0.0.%d/32", c.Counter)
 
 	network1 = Network{
-		ID:          u.String(),
-		Network:     u.String(),
+		ID:          fmt.Sprintf("%d", c.Counter),
+		Network:     ip,
 		Description: description,
 		Tags:        tags,
 	}
 
-	c.Networks[u.String()] = network1
+	c.Networks[ip] = network1
+
+	c.Counter = c.Counter + 1
 
 	return
 }
