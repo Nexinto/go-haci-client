@@ -32,9 +32,10 @@ func (n Network) IP() (string, error) {
 
 type Client interface {
 	Get(network string) (Network, error)
-	List(network string) ([]Network, error)
-	Assign(network string, description string, cidr int, tags []string) (Network, error)
+	List(supernet string) ([]Network, error)
+	Assign(supernet string, description string, cidr int, tags []string) (Network, error)
 	Delete(network string) error
+	Add(network, description string, tags []string) error
 }
 
 type WebClient struct {
@@ -46,6 +47,7 @@ type WebClient struct {
 // A very simple and limited client for unit tests.
 type FakeClient struct {
 	Supernets map[string]*FakeSupernet
+	Added     map[string]*Network
 }
 
 type FakeSupernet struct {
@@ -62,7 +64,7 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 
 	haci = &WebClient{
 		napping: napping.Session{
-			Log:      false,
+			Log:      true,
 			Client:   client,
 			Userinfo: neturl.UserPassword(username, password),
 		},
@@ -96,11 +98,11 @@ func (c *WebClient) Get(network string) (network1 Network, err error) {
 	return
 }
 
-func (c *WebClient) List(network string) (networks []Network, err error) {
+func (c *WebClient) List(supernet string) (networks []Network, err error) {
 	resp, err := c.napping.Get(c.URL+"/RESTWrapper/getSubnets",
 		&neturl.Values{
 			"rootName": {c.Root},
-			"supernet": {network},
+			"supernet": {supernet},
 		},
 		&networks,
 		nil)
@@ -116,13 +118,14 @@ func (c *WebClient) List(network string) (networks []Network, err error) {
 	return
 }
 
-func (c *WebClient) Assign(network, description string, cidr int, tags []string) (network1 Network, err error) {
+func (c *WebClient) Assign(supernet, description string, cidr int, tags []string) (network1 Network, err error) {
 	resp, err := c.napping.Get(c.URL+"/RESTWrapper/assignFreeSubnet",
 		&neturl.Values{
 			"rootName":    {c.Root},
-			"supernet":    {network},
+			"supernet":    {supernet},
 			"description": {description},
-			"cidr:":       {string(cidr)},
+			"cidr":        {fmt.Sprintf("%d", cidr)},
+			"tags":        {strings.Join(tags, " ")},
 		},
 		&network1,
 		nil)
@@ -143,6 +146,7 @@ func (c *WebClient) Delete(network string) (err error) {
 		&neturl.Values{
 			"rootName": {c.Root},
 			"network":  {network},
+			"networkLock": {"1"},
 		},
 		nil,
 		nil)
@@ -158,6 +162,28 @@ func (c *WebClient) Delete(network string) (err error) {
 	return
 }
 
+func (c *WebClient) Add(network, description string, tags []string) error {
+	resp, err := c.napping.Get(c.URL+"/RESTWrapper/addNet",
+		&neturl.Values{
+			"rootName":    {c.Root},
+			"network":     {network},
+			"description": {description},
+			"tags":        {strings.Join(tags, " ")},
+		},
+		nil,
+		nil)
+
+	if err != nil {
+		return err
+	}
+
+	if resp.Status() != 200 {
+		return fmt.Errorf("assignment failed: %s", resp.RawText())
+	}
+
+	return nil
+}
+
 func (c *FakeClient) Get(network string) (Network, error) {
 	for _, s := range c.Supernets {
 		if n, ok := s.Networks[network]; ok {
@@ -167,8 +193,8 @@ func (c *FakeClient) Get(network string) (Network, error) {
 	return Network{}, nil
 }
 
-func (c *FakeClient) List(network string) (networks []Network, err error) {
-	if s, ok := c.Supernets[network]; ok {
+func (c *FakeClient) List(supernet string) (networks []Network, err error) {
+	if s, ok := c.Supernets[supernet]; ok {
 		for _, n := range s.Networks {
 			networks = append(networks, n)
 		}
@@ -177,18 +203,18 @@ func (c *FakeClient) List(network string) (networks []Network, err error) {
 	return
 }
 
-func (c *FakeClient) Assign(network, description string, cidr int, tags []string) (network1 Network, err error) {
+func (c *FakeClient) Assign(supernet, description string, cidr int, tags []string) (network1 Network, err error) {
 
-	ip, net, err := net.ParseCIDR(network)
+	ip, net, err := net.ParseCIDR(supernet)
 	if err != nil {
 		return Network{}, err
 	}
 
-	if _, ok := c.Supernets[network]; !ok {
-		c.Supernets[network] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: ip}
+	if _, ok := c.Supernets[supernet]; !ok {
+		c.Supernets[supernet] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: ip}
 	}
 
-	newip := ccidr.Inc(c.Supernets[network].Last)
+	newip := ccidr.Inc(c.Supernets[supernet].Last)
 	netname := fmt.Sprintf("%s/32", newip.String())
 
 	network1 = Network{
@@ -197,8 +223,8 @@ func (c *FakeClient) Assign(network, description string, cidr int, tags []string
 		Tags:        tags,
 	}
 
-	c.Supernets[network].Networks[netname] = network1
-	c.Supernets[network].Last = newip
+	c.Supernets[supernet].Networks[netname] = network1
+	c.Supernets[supernet].Last = newip
 
 	return
 }
@@ -207,5 +233,9 @@ func (c *FakeClient) Delete(network string) error {
 	for _, s := range c.Supernets {
 		delete(s.Networks, network)
 	}
+	return nil
+}
+
+func (c *FakeClient) Add(network, description string, tags []string) error {
 	return nil
 }
