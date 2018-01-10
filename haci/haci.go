@@ -47,7 +47,7 @@ type WebClient struct {
 // A very simple and limited client for unit tests.
 type FakeClient struct {
 	Supernets map[string]*FakeSupernet
-	Added     map[string]*Network
+	Added     map[string]Network
 }
 
 type FakeSupernet struct {
@@ -75,7 +75,7 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 }
 
 func NewFakeClient() *FakeClient {
-	return &FakeClient{Supernets: map[string]*FakeSupernet{}}
+	return &FakeClient{Supernets: map[string]*FakeSupernet{}, Added: map[string]Network{}}
 }
 
 func (c *WebClient) Get(network string) (network1 Network, err error) {
@@ -144,8 +144,8 @@ func (c *WebClient) Assign(supernet, description string, cidr int, tags []string
 func (c *WebClient) Delete(network string) (err error) {
 	resp, err := c.napping.Get(c.URL+"/RESTWrapper/delNet",
 		&neturl.Values{
-			"rootName": {c.Root},
-			"network":  {network},
+			"rootName":    {c.Root},
+			"network":     {network},
 			"networkLock": {"1"},
 		},
 		nil,
@@ -185,6 +185,10 @@ func (c *WebClient) Add(network, description string, tags []string) error {
 }
 
 func (c *FakeClient) Get(network string) (Network, error) {
+	if n, ok := c.Added[network]; ok {
+		return n, nil
+	}
+
 	for _, s := range c.Supernets {
 		if n, ok := s.Networks[network]; ok {
 			return n, nil
@@ -233,9 +237,19 @@ func (c *FakeClient) Delete(network string) error {
 	for _, s := range c.Supernets {
 		delete(s.Networks, network)
 	}
+	delete(c.Added, network)
 	return nil
 }
 
 func (c *FakeClient) Add(network, description string, tags []string) error {
+	for _, s := range c.Supernets {
+		if _, exists := s.Networks[network]; exists {
+			return fmt.Errorf("network %s already exists", network)
+		}
+	}
+	if _, exists := c.Added[network]; exists {
+		return fmt.Errorf("network %s already exists", network)
+	}
+	c.Added[network] = Network{Network: network, Description: description, Tags: tags}
 	return nil
 }
