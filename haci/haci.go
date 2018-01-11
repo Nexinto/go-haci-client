@@ -36,6 +36,7 @@ type Client interface {
 	Assign(supernet string, description string, cidr int, tags []string) (Network, error)
 	Delete(network string) error
 	Add(network, description string, tags []string) error
+	Search(description string, exact bool) ([]Network, error)
 }
 
 type WebClient struct {
@@ -64,7 +65,7 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 
 	haci = &WebClient{
 		napping: napping.Session{
-			Log:      true,
+			Log:      false,
 			Client:   client,
 			Userinfo: neturl.UserPassword(username, password),
 		},
@@ -184,6 +185,28 @@ func (c *WebClient) Add(network, description string, tags []string) error {
 	return nil
 }
 
+func (c *WebClient) Search(description string, exact bool) (networks []Network, err error) {
+	values := neturl.Values{
+		"rootName": {c.Root},
+		"search":   {description},
+	}
+	if exact {
+		values["exact"] = []string{"true"}
+	}
+	resp, err := c.napping.Get(c.URL+"/RESTWrapper/search", &values, &networks, nil)
+
+	if err != nil {
+		return []Network{}, err
+	}
+
+	if resp.Status() != 200 {
+		return []Network{}, fmt.Errorf("search failed: %s", resp.RawText())
+	}
+
+	return
+
+}
+
 func (c *FakeClient) Get(network string) (Network, error) {
 	if n, ok := c.Added[network]; ok {
 		return n, nil
@@ -194,7 +217,7 @@ func (c *FakeClient) Get(network string) (Network, error) {
 			return n, nil
 		}
 	}
-	return Network{}, nil
+	return Network{}, fmt.Errorf("network %s not found", network)
 }
 
 func (c *FakeClient) List(supernet string) (networks []Network, err error) {
@@ -252,4 +275,9 @@ func (c *FakeClient) Add(network, description string, tags []string) error {
 	}
 	c.Added[network] = Network{Network: network, Description: description, Tags: tags}
 	return nil
+}
+
+func (c *FakeClient) Search(description string, exact bool) (networks []Network, err error) {
+
+	return []Network{}, nil
 }
