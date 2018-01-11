@@ -189,6 +189,7 @@ func (c *WebClient) Search(description string, exact bool) (networks []Network, 
 	values := neturl.Values{
 		"rootName": {c.Root},
 		"search":   {description},
+		"withDetails": {"1"},
 	}
 	if exact {
 		values["exact"] = []string{"true"}
