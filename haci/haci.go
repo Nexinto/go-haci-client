@@ -47,6 +47,7 @@ type WebClient struct {
 
 // A very simple and limited client for unit tests.
 type FakeClient struct {
+	UseFirst  bool
 	Supernets map[string]*FakeSupernet
 	Added     map[string]Network
 }
@@ -75,8 +76,14 @@ func NewWebClient(url, username, password, root string) (haci *WebClient, err er
 	return
 }
 
+// Create a new HaCi fake client.
 func NewFakeClient() *FakeClient {
 	return &FakeClient{Supernets: map[string]*FakeSupernet{}, Added: map[string]Network{}}
+}
+
+// Create a new HaCi fake client that assigns the first (network address) of a network.
+func NewFakeClientUsesFirst() *FakeClient {
+	return &FakeClient{Supernets: map[string]*FakeSupernet{}, Added: map[string]Network{}, UseFirst: true}
 }
 
 func (c *WebClient) Get(network string) (network1 Network, err error) {
@@ -187,8 +194,8 @@ func (c *WebClient) Add(network, description string, tags []string) error {
 
 func (c *WebClient) Search(description string, exact bool) (networks []Network, err error) {
 	values := neturl.Values{
-		"rootName": {c.Root},
-		"search":   {description},
+		"rootName":    {c.Root},
+		"search":      {description},
 		"withDetails": {"1"},
 	}
 	if exact {
@@ -239,7 +246,11 @@ func (c *FakeClient) Assign(supernet, description string, cidr int, tags []strin
 	}
 
 	if _, ok := c.Supernets[supernet]; !ok {
-		c.Supernets[supernet] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: ip}
+		last := ip
+		if c.UseFirst {
+			last = ccidr.Dec(last)
+		}
+		c.Supernets[supernet] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: last}
 	}
 
 	newip := ccidr.Inc(c.Supernets[supernet].Last)
@@ -279,6 +290,22 @@ func (c *FakeClient) Add(network, description string, tags []string) error {
 }
 
 func (c *FakeClient) Search(description string, exact bool) (networks []Network, err error) {
+	if exact != true {
+		panic("Search(*,false) not implemented")
+	}
 
-	return []Network{}, nil
+	for _, n := range c.Added {
+		if n.Description == description {
+			networks = append(networks, n)
+		}
+	}
+
+	for _, s := range c.Supernets {
+		for _, n := range s.Networks {
+			if n.Description == description {
+				networks = append(networks, n)
+			}
+		}
+	}
+	return
 }
