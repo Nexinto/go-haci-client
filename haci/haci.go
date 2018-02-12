@@ -37,6 +37,7 @@ type Client interface {
 	Delete(network string) error
 	Add(network, description string, tags []string) error
 	Search(description string, exact bool) ([]Network, error)
+	Reset() error
 }
 
 type WebClient struct {
@@ -215,6 +216,10 @@ func (c *WebClient) Search(description string, exact bool) (networks []Network, 
 
 }
 
+func (c *WebClient) Reset() error {
+	return fmt.Errorf("Reset() not implemented in haci.WebClient")
+}
+
 func (c *FakeClient) Get(network string) (Network, error) {
 	if n, ok := c.Added[network]; ok {
 		return n, nil
@@ -308,4 +313,11 @@ func (c *FakeClient) Search(description string, exact bool) (networks []Network,
 		}
 	}
 	return
+}
+
+func (c *FakeClient) Reset() error {
+	c.Supernets = map[string]*FakeSupernet{}
+	c.Added = map[string]Network{}
+
+	return nil
 }
