@@ -258,6 +258,11 @@ func (c *FakeClient) Assign(supernet, description string, cidr int, tags []strin
 		c.Supernets[supernet] = &FakeSupernet{Network: *net, Networks: map[string]Network{}, Last: last}
 	}
 
+	_, l := ccidr.AddressRange(net)
+	if l.Equal(c.Supernets[supernet].Last) {
+		return Network{}, fmt.Errorf("out of addresses in %s", supernet)
+	}
+
 	newip := ccidr.Inc(c.Supernets[supernet].Last)
 	netname := fmt.Sprintf("%s/32", newip.String())
 
