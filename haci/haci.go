@@ -300,19 +300,15 @@ func (c *FakeClient) Add(network, description string, tags []string) error {
 }
 
 func (c *FakeClient) Search(description string, exact bool) (networks []Network, err error) {
-	if exact != true {
-		panic("Search(*,false) not implemented")
-	}
-
 	for _, n := range c.Added {
-		if n.Description == description {
+		if exact && n.Description == description || !exact && strings.Contains(n.Description, description) {
 			networks = append(networks, n)
 		}
 	}
 
 	for _, s := range c.Supernets {
 		for _, n := range s.Networks {
-			if n.Description == description {
+			if exact && n.Description == description || !exact && strings.Contains(n.Description, description) {
 				networks = append(networks, n)
 			}
 		}
