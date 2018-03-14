@@ -38,6 +38,7 @@ type Client interface {
 	Add(network, description string, tags []string) error
 	Search(description string, exact bool) ([]Network, error)
 	Reset() error
+	String() string
 }
 
 type WebClient struct {
@@ -233,6 +234,10 @@ func (c *FakeClient) Get(network string) (Network, error) {
 	return Network{}, fmt.Errorf("network %s not found", network)
 }
 
+func (c *WebClient) String() string {
+	return fmt.Sprintf("HaCi at %s(%s)", c.URL, c.Root)
+}
+
 func (c *FakeClient) List(supernet string) (networks []Network, err error) {
 	if s, ok := c.Supernets[supernet]; ok {
 		for _, n := range s.Networks {
@@ -321,4 +326,8 @@ func (c *FakeClient) Reset() error {
 	c.Added = map[string]Network{}
 
 	return nil
+}
+
+func (c *FakeClient) String() string {
+	return "HaCi fake client"
 }
